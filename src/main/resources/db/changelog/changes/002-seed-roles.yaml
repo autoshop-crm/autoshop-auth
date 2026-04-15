@@ -1,0 +1,35 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-seed-roles
+      author: codex
+      changes:
+        - insert:
+            tableName: roles
+            columns:
+              - column:
+                  name: name
+                  value: ADMIN
+        - insert:
+            tableName: roles
+            columns:
+              - column:
+                  name: name
+                  value: MANAGER
+        - insert:
+            tableName: roles
+            columns:
+              - column:
+                  name: name
+                  value: MECHANIC
+        - insert:
+            tableName: roles
+            columns:
+              - column:
+                  name: name
+                  value: RECEPTIONIST
+        - insert:
+            tableName: roles
+            columns:
+              - column:
+                  name: name
+                  value: CLIENT

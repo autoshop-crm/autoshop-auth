@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:authdb-${random.uuid};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+app:
+  security:
+    jwt:
+      secret: test-secret-key-test-secret-key-1234567890
+      access-ttl: 15m
+      refresh-ttl: 7d
