@@ -2,9 +2,11 @@ package com.vladko.autoshopauth.auth.service;
 
 import com.vladko.autoshopauth.auth.dto.AuthResponse;
 import com.vladko.autoshopauth.auth.dto.LoginRequest;
+import com.vladko.autoshopauth.auth.dto.LogoutRequest;
 import com.vladko.autoshopauth.auth.dto.RefreshTokenRequest;
 import com.vladko.autoshopauth.auth.dto.RegisterRequest;
 import com.vladko.autoshopauth.auth.dto.RegisterResponse;
+import com.vladko.autoshopauth.auth.dto.TokenValidationResponse;
 import com.vladko.autoshopauth.common.exception.InvalidCredentialsException;
 import com.vladko.autoshopauth.common.exception.RoleNotFoundException;
 import com.vladko.autoshopauth.common.exception.UserAlreadyExistsException;
@@ -12,6 +14,8 @@ import com.vladko.autoshopauth.config.AppSecurityProperties;
 import com.vladko.autoshopauth.role.entity.Role;
 import com.vladko.autoshopauth.role.entity.RoleName;
 import com.vladko.autoshopauth.role.repository.RoleRepository;
+import com.vladko.autoshopauth.security.AccessTokenBlacklistService;
+import com.vladko.autoshopauth.security.AuthenticatedAccessToken;
 import com.vladko.autoshopauth.security.JwtService;
 import com.vladko.autoshopauth.token.entity.RefreshToken;
 import com.vladko.autoshopauth.token.entity.RefreshTokenValidationResult;
@@ -41,6 +45,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final AppSecurityProperties securityProperties;
+    private final AccessTokenBlacklistService blacklistService;
 
     @Transactional
     public RegisterResponse register(RegisterRequest request) {
@@ -93,6 +98,24 @@ public class AuthService {
 
         refreshTokenService.revoke(currentRefreshToken);
         return issueTokens(user);
+    }
+
+    @Transactional
+    public void logout(AuthenticatedAccessToken authenticatedAccessToken, LogoutRequest request) {
+        refreshTokenService.revokeForLogout(request.refreshToken(), authenticatedAccessToken.userId());
+        blacklistService.blacklistAccessToken(authenticatedAccessToken.jti(), authenticatedAccessToken.expiresAt());
+    }
+
+    @Transactional(readOnly = true)
+    public TokenValidationResponse validate(AuthenticatedAccessToken authenticatedAccessToken) {
+        return TokenValidationResponse.valid(
+                authenticatedAccessToken.userId(),
+                authenticatedAccessToken.email(),
+                authenticatedAccessToken.roles(),
+                authenticatedAccessToken.tokenType(),
+                authenticatedAccessToken.jti(),
+                authenticatedAccessToken.expiresAt()
+        );
     }
 
     private void authenticate(String email, String password) {

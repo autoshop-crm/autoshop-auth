@@ -25,6 +25,9 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({
             InvalidCredentialsException.class,
             InvalidRefreshTokenException.class,
+            RefreshTokenOwnershipException.class,
+            TokenBlacklistedException.class,
+            TokenValidationException.class,
             AuthenticationException.class
     })
     public ResponseEntity<ErrorResponse> handleUnauthorized(
@@ -40,6 +43,14 @@ public class GlobalExceptionHandler {
             HttpServletRequest request
     ) {
         return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, exception.getMessage(), request.getRequestURI());
+    }
+
+    @ExceptionHandler(RedisUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleRedisUnavailable(
+            RedisUnavailableException exception,
+            HttpServletRequest request
+    ) {
+        return buildResponse(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage(), request.getRequestURI());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

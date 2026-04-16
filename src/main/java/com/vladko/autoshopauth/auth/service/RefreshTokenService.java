@@ -1,6 +1,7 @@
 package com.vladko.autoshopauth.auth.service;
 
 import com.vladko.autoshopauth.common.exception.InvalidRefreshTokenException;
+import com.vladko.autoshopauth.common.exception.RefreshTokenOwnershipException;
 import com.vladko.autoshopauth.config.AppSecurityProperties;
 import com.vladko.autoshopauth.token.entity.RefreshToken;
 import com.vladko.autoshopauth.token.entity.RefreshTokenValidationResult;
@@ -51,5 +52,19 @@ public class RefreshTokenService {
     public void revoke(RefreshToken refreshToken) {
         refreshToken.setRevoked(true);
         refreshTokenRepository.save(refreshToken);
+    }
+
+    @Transactional
+    public void revokeForLogout(String rawToken, Long userId) {
+        refreshTokenRepository.findByToken(rawToken.trim()).ifPresent(refreshToken -> {
+            if (!refreshToken.getUser().getId().equals(userId)) {
+                throw new RefreshTokenOwnershipException("Refresh token does not belong to the current user");
+            }
+
+            if (!refreshToken.isRevoked()) {
+                refreshToken.setRevoked(true);
+                refreshTokenRepository.save(refreshToken);
+            }
+        });
     }
 }

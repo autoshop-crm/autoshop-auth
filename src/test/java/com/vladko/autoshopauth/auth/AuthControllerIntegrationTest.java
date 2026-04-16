@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vladko.autoshopauth.security.JwtService;
 import com.vladko.autoshopauth.token.entity.RefreshToken;
 import com.vladko.autoshopauth.token.repository.RefreshTokenRepository;
 import com.vladko.autoshopauth.user.entity.User;
@@ -16,8 +17,10 @@ import com.vladko.autoshopauth.user.repository.UserRepository;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -38,6 +41,12 @@ class AuthControllerIntegrationTest {
 
     @Autowired
     private RefreshTokenRepository refreshTokenRepository;
+
+    @Autowired
+    private JwtService jwtService;
+
+    @Value("${app.bootstrap.email}")
+    private String bootstrapEmail;
 
     @Test
     void registerCreatesUserAndReturns201() throws Exception {
@@ -63,6 +72,13 @@ class AuthControllerIntegrationTest {
     }
 
     @Test
+    void bootstrapUserIsCreatedForTestProfile() {
+        User bootstrapUser = userRepository.findByEmail(bootstrapEmail).orElseThrow();
+        assertThat(bootstrapUser.isActive()).isTrue();
+        assertThat(bootstrapUser.getRoles()).extracting(role -> role.getName().name()).contains("MANAGER");
+    }
+
+    @Test
     void registerDuplicateEmailReturns409() throws Exception {
         String email = uniqueEmail();
         registerUser(email, "StrongPass123");
@@ -80,11 +96,11 @@ class AuthControllerIntegrationTest {
     }
 
     @Test
-    void loginReturnsAccessAndRefreshTokens() throws Exception {
+    void loginReturnsAccessAndRefreshTokensAndAccessTokenContainsJti() throws Exception {
         String email = uniqueEmail();
         registerUser(email, "StrongPass123");
 
-        mockMvc.perform(post("/api/auth/login")
+        MvcResult result = mockMvc.perform(post("/api/auth/login")
                         .contentType(APPLICATION_JSON)
                         .content("""
                                 {
@@ -97,7 +113,15 @@ class AuthControllerIntegrationTest {
                 .andExpect(jsonPath("$.refreshToken").isNotEmpty())
                 .andExpect(jsonPath("$.tokenType").value("Bearer"))
                 .andExpect(jsonPath("$.email").value(email))
-                .andExpect(jsonPath("$.roles", hasItem("CLIENT")));
+                .andExpect(jsonPath("$.roles", hasItem("CLIENT")))
+                .andReturn();
+
+        JsonNode json = readJson(result);
+        var claims = jwtService.parseAccessToken(json.get("accessToken").asText());
+
+        assertThat(claims.jti()).isNotBlank();
+        assertThat(claims.type()).isEqualTo("access");
+        assertThat(claims.email()).isEqualTo(email);
     }
 
     @Test
@@ -118,22 +142,12 @@ class AuthControllerIntegrationTest {
     }
 
     @Test
-    void refreshReturnsNewTokenPairAndRevokesOldRefreshToken() throws Exception {
+    void refreshReturnsNewTokenPairAndRevokesOldRefreshTokenAndRotatesJti() throws Exception {
         String email = uniqueEmail();
         registerUser(email, "StrongPass123");
 
-        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
-                        .contentType(APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "email": "%s",
-                                  "password": "StrongPass123"
-                                }
-                                """.formatted(email)))
-                .andExpect(status().isOk())
-                .andReturn();
-
-        JsonNode loginJson = readJson(loginResult);
+        JsonNode loginJson = loginUser(email, "StrongPass123");
+        String oldAccessToken = loginJson.get("accessToken").asText();
         String oldRefreshTokenValue = loginJson.get("refreshToken").asText();
 
         MvcResult refreshResult = mockMvc.perform(post("/api/auth/refresh")
@@ -149,15 +163,28 @@ class AuthControllerIntegrationTest {
                 .andReturn();
 
         JsonNode refreshJson = readJson(refreshResult);
+        String newAccessToken = refreshJson.get("accessToken").asText();
         String newRefreshTokenValue = refreshJson.get("refreshToken").asText();
 
         assertThat(newRefreshTokenValue).isNotEqualTo(oldRefreshTokenValue);
+        assertThat(jwtService.parseAccessToken(newAccessToken).jti())
+                .isNotEqualTo(jwtService.parseAccessToken(oldAccessToken).jti());
 
         RefreshToken oldRefreshToken = refreshTokenRepository.findByToken(oldRefreshTokenValue).orElseThrow();
         RefreshToken newRefreshToken = refreshTokenRepository.findByToken(newRefreshTokenValue).orElseThrow();
 
         assertThat(oldRefreshToken.isRevoked()).isTrue();
         assertThat(newRefreshToken.isRevoked()).isFalse();
+
+        mockMvc.perform(post("/api/auth/refresh")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "refreshToken": "%s"
+                                }
+                                """.formatted(oldRefreshTokenValue)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Refresh token is invalid"));
     }
 
     @Test
@@ -169,6 +196,122 @@ class AuthControllerIntegrationTest {
                                   "refreshToken": "unknown-token"
                                 }
                                 """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Refresh token is invalid"));
+    }
+
+    @Test
+    void validateReturnsClaimsForValidAccessToken() throws Exception {
+        String email = uniqueEmail();
+        registerUser(email, "StrongPass123");
+        JsonNode loginJson = loginUser(email, "StrongPass123");
+        String accessToken = loginJson.get("accessToken").asText();
+
+        mockMvc.perform(post("/api/auth/validate")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(accessToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.valid").value(true))
+                .andExpect(jsonPath("$.email").value(email))
+                .andExpect(jsonPath("$.tokenType").value("access"))
+                .andExpect(jsonPath("$.roles", hasItem("CLIENT")))
+                .andExpect(jsonPath("$.jti").isNotEmpty())
+                .andExpect(jsonPath("$.expiresAt").isNotEmpty());
+    }
+
+    @Test
+    void logoutBlacklistsAccessTokenAndRevokesRefreshToken() throws Exception {
+        String email = uniqueEmail();
+        registerUser(email, "StrongPass123");
+        JsonNode loginJson = loginUser(email, "StrongPass123");
+
+        String accessToken = loginJson.get("accessToken").asText();
+        String refreshToken = loginJson.get("refreshToken").asText();
+
+        mockMvc.perform(post("/api/auth/logout")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(accessToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "refreshToken": "%s"
+                                }
+                                """.formatted(refreshToken)))
+                .andExpect(status().isOk());
+
+        RefreshToken persistedRefreshToken = refreshTokenRepository.findByToken(refreshToken).orElseThrow();
+        assertThat(persistedRefreshToken.isRevoked()).isTrue();
+
+        mockMvc.perform(post("/api/auth/validate")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(accessToken)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.valid").value(false))
+                .andExpect(jsonPath("$.message").value("Access token is revoked"));
+    }
+
+    @Test
+    void logoutWithInvalidBearerReturns401() throws Exception {
+        mockMvc.perform(post("/api/auth/logout")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer invalid-token")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "refreshToken": "some-token"
+                                }
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Access token is invalid"));
+    }
+
+    @Test
+    void logoutWithForeignRefreshTokenReturns401AndDoesNotRevokeForeignSession() throws Exception {
+        String firstEmail = uniqueEmail();
+        String secondEmail = uniqueEmail();
+        registerUser(firstEmail, "StrongPass123");
+        registerUser(secondEmail, "StrongPass123");
+
+        JsonNode firstLogin = loginUser(firstEmail, "StrongPass123");
+        JsonNode secondLogin = loginUser(secondEmail, "StrongPass123");
+
+        String firstAccessToken = firstLogin.get("accessToken").asText();
+        String secondRefreshToken = secondLogin.get("refreshToken").asText();
+
+        mockMvc.perform(post("/api/auth/logout")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(firstAccessToken))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "refreshToken": "%s"
+                                }
+                                """.formatted(secondRefreshToken)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Refresh token does not belong to the current user"));
+
+        RefreshToken foreignRefreshToken = refreshTokenRepository.findByToken(secondRefreshToken).orElseThrow();
+        assertThat(foreignRefreshToken.isRevoked()).isFalse();
+    }
+
+    @Test
+    void inactiveUserCannotValidateOrRefresh() throws Exception {
+        String email = uniqueEmail();
+        registerUser(email, "StrongPass123");
+        JsonNode loginJson = loginUser(email, "StrongPass123");
+
+        User user = userRepository.findByEmail(email).orElseThrow();
+        user.setActive(false);
+        userRepository.save(user);
+
+        mockMvc.perform(post("/api/auth/validate")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(loginJson.get("accessToken").asText())))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.valid").value(false))
+                .andExpect(jsonPath("$.message").value("Access token is invalid"));
+
+        mockMvc.perform(post("/api/auth/refresh")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "refreshToken": "%s"
+                                }
+                                """.formatted(loginJson.get("refreshToken").asText())))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message").value("Refresh token is invalid"));
     }
@@ -185,8 +328,27 @@ class AuthControllerIntegrationTest {
                 .andExpect(status().isCreated());
     }
 
+    private JsonNode loginUser(String email, String password) throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/auth/login")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "%s",
+                                  "password": "%s"
+                                }
+                                """.formatted(email, password)))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        return readJson(result);
+    }
+
     private JsonNode readJson(MvcResult result) throws Exception {
         return objectMapper.readTree(result.getResponse().getContentAsString());
+    }
+
+    private String bearer(String token) {
+        return "Bearer " + token;
     }
 
     private String uniqueEmail() {

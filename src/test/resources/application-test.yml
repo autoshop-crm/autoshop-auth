@@ -1,4 +1,8 @@
 spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
   datasource:
     url: jdbc:h2:mem:authdb-${random.uuid};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
     username: sa
@@ -17,3 +21,8 @@ app:
       secret: test-secret-key-test-secret-key-1234567890
       access-ttl: 15m
       refresh-ttl: 7d
+  bootstrap:
+    enabled: true
+    email: manager-test@autoshop.local
+    password: StrongPass123!
+    role: MANAGER
