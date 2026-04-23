@@ -45,6 +45,14 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, exception.getMessage(), request.getRequestURI());
     }
 
+    @ExceptionHandler(InvalidRoleAssignmentException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidRoleAssignment(
+            InvalidRoleAssignmentException exception,
+            HttpServletRequest request
+    ) {
+        return buildResponse(HttpStatus.BAD_REQUEST, exception.getMessage(), request.getRequestURI());
+    }
+
     @ExceptionHandler(RedisUnavailableException.class)
     public ResponseEntity<ErrorResponse> handleRedisUnavailable(
             RedisUnavailableException exception,

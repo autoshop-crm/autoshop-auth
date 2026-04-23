@@ -1,6 +1,7 @@
 package com.vladko.autoshopauth.auth.controller;
 
 import com.vladko.autoshopauth.auth.dto.AuthResponse;
+import com.vladko.autoshopauth.auth.dto.CurrentUserResponse;
 import com.vladko.autoshopauth.auth.dto.LoginRequest;
 import com.vladko.autoshopauth.auth.dto.LogoutRequest;
 import com.vladko.autoshopauth.auth.dto.RefreshTokenRequest;
@@ -14,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -55,5 +57,19 @@ public class AuthController {
             @AuthenticationPrincipal AuthenticatedAccessToken authenticatedAccessToken
     ) {
         return ResponseEntity.ok(authService.validate(authenticatedAccessToken));
+    }
+
+    @PostMapping("/verify-token")
+    public ResponseEntity<TokenValidationResponse> verifyToken(
+            @AuthenticationPrincipal AuthenticatedAccessToken authenticatedAccessToken
+    ) {
+        return ResponseEntity.ok(authService.validate(authenticatedAccessToken));
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<CurrentUserResponse> me(
+            @AuthenticationPrincipal AuthenticatedAccessToken authenticatedAccessToken
+    ) {
+        return ResponseEntity.ok(authService.currentUser(authenticatedAccessToken));
     }
 }

@@ -20,6 +20,7 @@ import org.springframework.stereotype.Component;
 public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
     private static final String VALIDATE_PATH = "/api/auth/validate";
+    private static final String VERIFY_TOKEN_PATH = "/api/auth/verify-token";
 
     private final ObjectMapper objectMapper;
 
@@ -32,7 +33,7 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 
-        if (VALIDATE_PATH.equals(request.getRequestURI())) {
+        if (VALIDATE_PATH.equals(request.getRequestURI()) || VERIFY_TOKEN_PATH.equals(request.getRequestURI())) {
             objectMapper.writeValue(response.getWriter(), TokenValidationResponse.invalid(authException.getMessage()));
             return;
         }

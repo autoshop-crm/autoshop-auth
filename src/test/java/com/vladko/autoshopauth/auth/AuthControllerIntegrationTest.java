@@ -3,6 +3,7 @@ package com.vladko.autoshopauth.auth;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -76,6 +77,15 @@ class AuthControllerIntegrationTest {
         User bootstrapUser = userRepository.findByEmail(bootstrapEmail).orElseThrow();
         assertThat(bootstrapUser.isActive()).isTrue();
         assertThat(bootstrapUser.getRoles()).extracting(role -> role.getName().name()).contains("MANAGER");
+    }
+
+    @Test
+    void devUsersAreCreatedForRoleSmokeTests() {
+        assertDevUser("admin@autoshop.local", "ADMIN");
+        assertDevUser("manager@autoshop.local", "MANAGER");
+        assertDevUser("reception@autoshop.local", "RECEPTIONIST");
+        assertDevUser("mechanic@autoshop.local", "MECHANIC");
+        assertDevUser("client@autoshop.local", "CLIENT");
     }
 
     @Test
@@ -219,6 +229,45 @@ class AuthControllerIntegrationTest {
     }
 
     @Test
+    void verifyTokenReturnsSameClaimsAsValidate() throws Exception {
+        String email = uniqueEmail();
+        registerUser(email, "StrongPass123");
+        JsonNode loginJson = loginUser(email, "StrongPass123");
+        String accessToken = loginJson.get("accessToken").asText();
+
+        mockMvc.perform(post("/api/auth/verify-token")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(accessToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.valid").value(true))
+                .andExpect(jsonPath("$.email").value(email))
+                .andExpect(jsonPath("$.roles", hasItem("CLIENT")))
+                .andExpect(jsonPath("$.jti").isNotEmpty());
+    }
+
+    @Test
+    void meReturnsCurrentUserForValidAccessToken() throws Exception {
+        String email = uniqueEmail();
+        registerUser(email, "StrongPass123");
+        JsonNode loginJson = loginUser(email, "StrongPass123");
+        String accessToken = loginJson.get("accessToken").asText();
+
+        mockMvc.perform(get("/api/auth/me")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(accessToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId").value(loginJson.get("userId").asLong()))
+                .andExpect(jsonPath("$.email").value(email))
+                .andExpect(jsonPath("$.roles", hasItem("CLIENT")))
+                .andExpect(jsonPath("$.expiresAt").isNotEmpty());
+    }
+
+    @Test
+    void meWithoutTokenReturns401() throws Exception {
+        mockMvc.perform(get("/api/auth/me"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Full authentication is required to access this resource"));
+    }
+
+    @Test
     void logoutBlacklistsAccessTokenAndRevokesRefreshToken() throws Exception {
         String email = uniqueEmail();
         registerUser(email, "StrongPass123");
@@ -316,6 +365,106 @@ class AuthControllerIntegrationTest {
                 .andExpect(jsonPath("$.message").value("Refresh token is invalid"));
     }
 
+    @Test
+    void adminCanCreateMechanicUserAndCreatedUserCanLogin() throws Exception {
+        JsonNode adminLogin = loginUser("admin@autoshop.local", "Admin123!");
+        String mechanicEmail = uniqueEmail();
+
+        mockMvc.perform(post("/api/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminLogin.get("accessToken").asText()))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "%s",
+                                  "password": "MechanicPass123!",
+                                  "firstName": "New",
+                                  "lastName": "Mechanic",
+                                  "roles": ["MECHANIC"]
+                                }
+                                """.formatted(mechanicEmail)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.email").value(mechanicEmail))
+                .andExpect(jsonPath("$.roles", hasItem("MECHANIC")))
+                .andExpect(jsonPath("$.active").value(true));
+
+        JsonNode mechanicLogin = loginUser(mechanicEmail, "MechanicPass123!");
+        assertThat(mechanicLogin.get("roles").toString()).contains("MECHANIC");
+    }
+
+    @Test
+    void adminCanCreateManagerUser() throws Exception {
+        JsonNode adminLogin = loginUser("admin@autoshop.local", "Admin123!");
+        String managerEmail = uniqueEmail();
+
+        mockMvc.perform(post("/api/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminLogin.get("accessToken").asText()))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "%s",
+                                  "password": "ManagerPass123!",
+                                  "firstName": "New",
+                                  "lastName": "Manager",
+                                  "roles": ["MANAGER"]
+                                }
+                                """.formatted(managerEmail)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.email").value(managerEmail))
+                .andExpect(jsonPath("$.roles", hasItem("MANAGER")));
+    }
+
+    @Test
+    void managerCannotCreateStaffUser() throws Exception {
+        JsonNode managerLogin = loginUser("manager@autoshop.local", "Manager123!");
+
+        mockMvc.perform(post("/api/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(managerLogin.get("accessToken").asText()))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "%s",
+                                  "password": "MechanicPass123!",
+                                  "roles": ["MECHANIC"]
+                                }
+                                """.formatted(uniqueEmail())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void clientCannotCreateStaffUser() throws Exception {
+        JsonNode clientLogin = loginUser("client@autoshop.local", "Client123!");
+
+        mockMvc.perform(post("/api/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(clientLogin.get("accessToken").asText()))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "%s",
+                                  "password": "MechanicPass123!",
+                                  "roles": ["MECHANIC"]
+                                }
+                                """.formatted(uniqueEmail())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void adminCannotCreateClientThroughStaffEndpoint() throws Exception {
+        JsonNode adminLogin = loginUser("admin@autoshop.local", "Admin123!");
+
+        mockMvc.perform(post("/api/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(adminLogin.get("accessToken").asText()))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "%s",
+                                  "password": "ClientPass123!",
+                                  "roles": ["CLIENT"]
+                                }
+                                """.formatted(uniqueEmail())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("CLIENT users must be created through public registration"));
+    }
+
     private void registerUser(String email, String password) throws Exception {
         mockMvc.perform(post("/api/auth/register")
                         .contentType(APPLICATION_JSON)
@@ -353,5 +502,11 @@ class AuthControllerIntegrationTest {
 
     private String uniqueEmail() {
         return "user-" + UUID.randomUUID() + "@example.com";
+    }
+
+    private void assertDevUser(String email, String roleName) {
+        User user = userRepository.findByEmail(email).orElseThrow();
+        assertThat(user.isActive()).isTrue();
+        assertThat(user.getRoles()).extracting(role -> role.getName().name()).contains(roleName);
     }
 }

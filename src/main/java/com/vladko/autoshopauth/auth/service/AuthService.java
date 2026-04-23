@@ -1,6 +1,7 @@
 package com.vladko.autoshopauth.auth.service;
 
 import com.vladko.autoshopauth.auth.dto.AuthResponse;
+import com.vladko.autoshopauth.auth.dto.CurrentUserResponse;
 import com.vladko.autoshopauth.auth.dto.LoginRequest;
 import com.vladko.autoshopauth.auth.dto.LogoutRequest;
 import com.vladko.autoshopauth.auth.dto.RefreshTokenRequest;
@@ -114,6 +115,16 @@ public class AuthService {
                 authenticatedAccessToken.roles(),
                 authenticatedAccessToken.tokenType(),
                 authenticatedAccessToken.jti(),
+                authenticatedAccessToken.expiresAt()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public CurrentUserResponse currentUser(AuthenticatedAccessToken authenticatedAccessToken) {
+        return new CurrentUserResponse(
+                authenticatedAccessToken.userId(),
+                authenticatedAccessToken.email(),
+                authenticatedAccessToken.roles(),
                 authenticatedAccessToken.expiresAt()
         );
     }
