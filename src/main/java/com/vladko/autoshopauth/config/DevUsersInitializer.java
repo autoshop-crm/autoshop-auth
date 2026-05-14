@@ -5,6 +5,7 @@ import com.vladko.autoshopauth.role.entity.Role;
 import com.vladko.autoshopauth.role.entity.RoleName;
 import com.vladko.autoshopauth.role.repository.RoleRepository;
 import com.vladko.autoshopauth.user.entity.User;
+import com.vladko.autoshopauth.integration.core.service.CoreEmployeeSyncService;
 import com.vladko.autoshopauth.user.repository.UserRepository;
 import java.util.Locale;
 import java.util.Set;
@@ -24,6 +25,7 @@ public class DevUsersInitializer implements ApplicationRunner {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final CoreEmployeeSyncService coreEmployeeSyncService;
 
     @Override
     @Transactional
@@ -57,6 +59,9 @@ public class DevUsersInitializer implements ApplicationRunner {
                 .roles(Set.of(role))
                 .build();
 
-        userRepository.save(user);
+        User savedUser = userRepository.save(user);
+        if (roleName != RoleName.CLIENT) {
+            coreEmployeeSyncService.syncStaffUser(savedUser);
+        }
     }
 }

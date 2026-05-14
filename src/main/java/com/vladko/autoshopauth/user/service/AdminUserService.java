@@ -8,6 +8,7 @@ import com.vladko.autoshopauth.role.entity.RoleName;
 import com.vladko.autoshopauth.role.repository.RoleRepository;
 import com.vladko.autoshopauth.user.dto.AdminUserCreateRequest;
 import com.vladko.autoshopauth.user.dto.UserResponse;
+import com.vladko.autoshopauth.integration.core.service.CoreEmployeeSyncService;
 import com.vladko.autoshopauth.user.entity.User;
 import com.vladko.autoshopauth.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ public class AdminUserService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final CoreEmployeeSyncService coreEmployeeSyncService;
 
     @Transactional
     public UserResponse createUser(AdminUserCreateRequest request) {
@@ -50,7 +52,9 @@ public class AdminUserService {
                 .roles(roles)
                 .build();
 
-        return toResponse(userRepository.save(user));
+        User savedUser = userRepository.save(user);
+        coreEmployeeSyncService.syncStaffUser(savedUser);
+        return toResponse(savedUser);
     }
 
     private void validateStaffRoles(Set<RoleName> roles) {

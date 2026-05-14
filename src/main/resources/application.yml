@@ -35,3 +35,6 @@ app:
     email: ${BOOTSTRAP_EMAIL:manager@autoshop.local}
     password: ${BOOTSTRAP_PASSWORD:ChangeMe123!}
     role: ${BOOTSTRAP_ROLE:MANAGER}
+  core:
+    base-url: ${CORE_BASE_URL:http://core:8080}
+    sync-token: ${APP_EMPLOYEE_SYNC_TOKEN:change-me-employee-sync-token}

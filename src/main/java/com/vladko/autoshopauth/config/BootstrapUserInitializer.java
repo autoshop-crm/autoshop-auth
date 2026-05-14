@@ -4,6 +4,7 @@ import com.vladko.autoshopauth.common.exception.RoleNotFoundException;
 import com.vladko.autoshopauth.role.entity.Role;
 import com.vladko.autoshopauth.role.repository.RoleRepository;
 import com.vladko.autoshopauth.user.entity.User;
+import com.vladko.autoshopauth.integration.core.service.CoreEmployeeSyncService;
 import com.vladko.autoshopauth.user.repository.UserRepository;
 import java.util.Locale;
 import java.util.Set;
@@ -16,7 +17,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
-@Profile({"dev", "test"})
+@Profile({"dev", "test", "local"})
 @RequiredArgsConstructor
 public class BootstrapUserInitializer implements ApplicationRunner {
 
@@ -24,6 +25,7 @@ public class BootstrapUserInitializer implements ApplicationRunner {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final CoreEmployeeSyncService coreEmployeeSyncService;
 
     @Override
     @Transactional
@@ -43,12 +45,13 @@ public class BootstrapUserInitializer implements ApplicationRunner {
         User user = User.builder()
                 .email(normalizedEmail)
                 .passwordHash(passwordEncoder.encode(bootstrapProperties.getPassword()))
-                .firstName("Dev")
-                .lastName("Manager")
+                .firstName("Admin")
+                .lastName("User")
                 .active(true)
                 .roles(Set.of(role))
                 .build();
 
-        userRepository.save(user);
+        User savedUser = userRepository.save(user);
+        coreEmployeeSyncService.syncStaffUser(savedUser);
     }
 }

@@ -1,0 +1,11 @@
+spring:
+  config:
+    activate:
+      on-profile: local
+
+app:
+  bootstrap:
+    enabled: true
+    email: ${BOOTSTRAP_EMAIL:admin@autoshop.local}
+    password: ${BOOTSTRAP_PASSWORD:Admin123!}
+    role: ${BOOTSTRAP_ROLE:ADMIN}
