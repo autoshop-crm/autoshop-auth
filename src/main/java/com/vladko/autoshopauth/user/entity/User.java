@@ -3,6 +3,8 @@ package com.vladko.autoshopauth.user.entity;
 import com.vladko.autoshopauth.role.entity.Role;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -48,6 +50,16 @@ public class User {
     @Column(name = "last_name", length = 100)
     private String lastName;
 
+    @Column(name = "phone_number", length = 32, unique = true)
+    private String phoneNumber;
+
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "account_status", nullable = false, length = 32)
+    private AccountStatus accountStatus;
+
     @Column(name = "is_active", nullable = false)
     private boolean active;
 
@@ -71,6 +83,9 @@ public class User {
         Instant now = Instant.now();
         this.createdAt = now;
         this.updatedAt = now;
+        if (accountStatus == null) {
+            this.accountStatus = AccountStatus.ACTIVE;
+        }
     }
 
     @PreUpdate

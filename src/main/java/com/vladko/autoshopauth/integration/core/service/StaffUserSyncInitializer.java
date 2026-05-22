@@ -21,7 +21,7 @@ public class StaffUserSyncInitializer implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         for (User user : userRepository.findAll()) {
             boolean hasStaffRole = user.getRoles().stream()
-                    .anyMatch(role -> role.getName() != RoleName.CLIENT);
+                    .anyMatch(role -> role.getName() != RoleName.CUSTOMER);
             if (!hasStaffRole) {
                 continue;
             }

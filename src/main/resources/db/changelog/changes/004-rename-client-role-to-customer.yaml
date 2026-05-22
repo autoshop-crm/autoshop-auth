@@ -1,0 +1,13 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-rename-client-role-to-customer
+      author: codex
+      preConditions:
+        onFail: MARK_RAN
+        onError: MARK_RAN
+        sqlCheck:
+          expectedResult: "1"
+          sql: SELECT COUNT(*) FROM roles WHERE name = 'CLIENT'
+      changes:
+        - sql:
+            sql: UPDATE roles SET name = 'CUSTOMER' WHERE name = 'CLIENT';

@@ -1,10 +1,11 @@
 package com.vladko.autoshopauth.config;
 
 import com.vladko.autoshopauth.common.exception.RoleNotFoundException;
+import com.vladko.autoshopauth.integration.core.service.CoreEmployeeSyncService;
 import com.vladko.autoshopauth.role.entity.Role;
 import com.vladko.autoshopauth.role.repository.RoleRepository;
+import com.vladko.autoshopauth.user.entity.AccountStatus;
 import com.vladko.autoshopauth.user.entity.User;
-import com.vladko.autoshopauth.integration.core.service.CoreEmployeeSyncService;
 import com.vladko.autoshopauth.user.repository.UserRepository;
 import java.util.Locale;
 import java.util.Set;
@@ -47,6 +48,8 @@ public class BootstrapUserInitializer implements ApplicationRunner {
                 .passwordHash(passwordEncoder.encode(bootstrapProperties.getPassword()))
                 .firstName("Admin")
                 .lastName("User")
+                .emailVerified(true)
+                .accountStatus(AccountStatus.ACTIVE)
                 .active(true)
                 .roles(Set.of(role))
                 .build();

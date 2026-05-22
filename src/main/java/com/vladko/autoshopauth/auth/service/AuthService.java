@@ -2,12 +2,14 @@ package com.vladko.autoshopauth.auth.service;
 
 import com.vladko.autoshopauth.auth.dto.AuthResponse;
 import com.vladko.autoshopauth.auth.dto.CurrentUserResponse;
+import com.vladko.autoshopauth.auth.dto.ForgotPasswordRequest;
 import com.vladko.autoshopauth.auth.dto.LoginRequest;
 import com.vladko.autoshopauth.auth.dto.LogoutRequest;
 import com.vladko.autoshopauth.auth.dto.RefreshTokenRequest;
 import com.vladko.autoshopauth.auth.dto.RegisterRequest;
-import com.vladko.autoshopauth.auth.dto.RegisterResponse;
+import com.vladko.autoshopauth.auth.dto.ResetPasswordRequest;
 import com.vladko.autoshopauth.auth.dto.TokenValidationResponse;
+import com.vladko.autoshopauth.auth.dto.VerifyEmailRequest;
 import com.vladko.autoshopauth.common.exception.InvalidCredentialsException;
 import com.vladko.autoshopauth.common.exception.RoleNotFoundException;
 import com.vladko.autoshopauth.common.exception.UserAlreadyExistsException;
@@ -18,8 +20,11 @@ import com.vladko.autoshopauth.role.repository.RoleRepository;
 import com.vladko.autoshopauth.security.AccessTokenBlacklistService;
 import com.vladko.autoshopauth.security.AuthenticatedAccessToken;
 import com.vladko.autoshopauth.security.JwtService;
+import com.vladko.autoshopauth.token.entity.CustomerActionToken;
+import com.vladko.autoshopauth.token.entity.CustomerActionTokenType;
 import com.vladko.autoshopauth.token.entity.RefreshToken;
 import com.vladko.autoshopauth.token.entity.RefreshTokenValidationResult;
+import com.vladko.autoshopauth.user.entity.AccountStatus;
 import com.vladko.autoshopauth.user.entity.User;
 import com.vladko.autoshopauth.user.repository.UserRepository;
 import java.util.Locale;
@@ -47,33 +52,38 @@ public class AuthService {
     private final RefreshTokenService refreshTokenService;
     private final AppSecurityProperties securityProperties;
     private final AccessTokenBlacklistService blacklistService;
+    private final CustomerActionTokenService customerActionTokenService;
 
     @Transactional
-    public RegisterResponse register(RegisterRequest request) {
+    public AuthResponse register(RegisterRequest request) {
         String normalizedEmail = normalizeEmail(request.email());
         if (userRepository.existsByEmail(normalizedEmail)) {
             throw new UserAlreadyExistsException("User with this email already exists");
         }
 
-        Role clientRole = roleRepository.findByName(RoleName.CLIENT)
-                .orElseThrow(() -> new RoleNotFoundException("Default CLIENT role not found"));
+        String normalizedPhoneNumber = normalizeOptionalPhoneNumber(request.phoneNumber());
+        if (normalizedPhoneNumber != null && userRepository.existsByPhoneNumber(normalizedPhoneNumber)) {
+            throw new UserAlreadyExistsException("User with this phone number already exists");
+        }
+
+        Role customerRole = roleRepository.findByName(RoleName.CUSTOMER)
+                .orElseThrow(() -> new RoleNotFoundException("Default CUSTOMER role not found"));
 
         User user = User.builder()
                 .email(normalizedEmail)
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .firstName(normalizeOptionalText(request.firstName()))
                 .lastName(normalizeOptionalText(request.lastName()))
+                .phoneNumber(normalizedPhoneNumber)
+                .emailVerified(false)
+                .accountStatus(AccountStatus.ACTIVE)
                 .active(true)
-                .roles(Set.of(clientRole))
+                .roles(Set.of(customerRole))
                 .build();
 
         User savedUser = userRepository.save(user);
-        return new RegisterResponse(
-                savedUser.getId(),
-                savedUser.getEmail(),
-                roleNames(savedUser),
-                savedUser.getCreatedAt()
-        );
+        customerActionTokenService.createEmailVerificationToken(savedUser);
+        return issueTokens(savedUser);
     }
 
     @Transactional
@@ -84,7 +94,7 @@ public class AuthService {
         User user = userRepository.findByEmail(normalizedEmail)
                 .orElseThrow(() -> new InvalidCredentialsException("Invalid email or password"));
 
-        if (!user.isActive()) {
+        if (!user.isActive() || user.getAccountStatus() != AccountStatus.ACTIVE) {
             throw new InvalidCredentialsException("Invalid email or password");
         }
 
@@ -105,6 +115,41 @@ public class AuthService {
     public void logout(AuthenticatedAccessToken authenticatedAccessToken, LogoutRequest request) {
         refreshTokenService.revokeForLogout(request.refreshToken(), authenticatedAccessToken.userId());
         blacklistService.blacklistAccessToken(authenticatedAccessToken.jti(), authenticatedAccessToken.expiresAt());
+    }
+
+    @Transactional
+    public void forgotPassword(ForgotPasswordRequest request) {
+        String normalizedEmail = normalizeEmail(request.email());
+        userRepository.findByEmail(normalizedEmail)
+                .filter(User::isActive)
+                .ifPresent(customerActionTokenService::createPasswordResetToken);
+    }
+
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        CustomerActionToken token = customerActionTokenService.validate(
+                request.token(),
+                CustomerActionTokenType.PASSWORD_RESET
+        );
+
+        User user = token.getUser();
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        customerActionTokenService.markUsed(token);
+        refreshTokenService.revokeAllForUser(user.getId());
+        userRepository.save(user);
+    }
+
+    @Transactional
+    public void verifyEmail(VerifyEmailRequest request) {
+        CustomerActionToken token = customerActionTokenService.validate(
+                request.token(),
+                CustomerActionTokenType.EMAIL_VERIFICATION
+        );
+
+        User user = token.getUser();
+        user.setEmailVerified(true);
+        customerActionTokenService.markUsed(token);
+        userRepository.save(user);
     }
 
     @Transactional(readOnly = true)
@@ -144,16 +189,24 @@ public class AuthService {
     private AuthResponse issueTokens(User user) {
         RefreshToken refreshToken = refreshTokenService.create(user);
         String accessToken = jwtService.generateAccessToken(user);
+        var accessTokenClaims = jwtService.parseAccessToken(accessToken);
 
         return new AuthResponse(
-                accessToken,
-                refreshToken.getToken(),
-                "Bearer",
-                securityProperties.getJwt().getAccessTtl().toSeconds(),
-                securityProperties.getJwt().getRefreshTtl().toSeconds(),
+                user.getId(),
                 user.getId(),
                 user.getEmail(),
-                roleNames(user)
+                user.getPhoneNumber(),
+                user.getFirstName(),
+                user.getLastName(),
+                roleNames(user),
+                accessToken,
+                refreshToken.getToken(),
+                accessTokenClaims.expiresAt(),
+                user.isEmailVerified(),
+                user.getAccountStatus().name(),
+                "Bearer",
+                securityProperties.getJwt().getAccessTtl().toSeconds(),
+                securityProperties.getJwt().getRefreshTtl().toSeconds()
         );
     }
 
@@ -175,5 +228,14 @@ public class AuthService {
 
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String normalizeOptionalPhoneNumber(String value) {
+        String normalized = normalizeOptionalText(value);
+        if (normalized == null) {
+            return null;
+        }
+
+        return normalized.replaceAll("\\s+", "");
     }
 }

@@ -3,3 +3,9 @@ databaseChangeLog:
       file: db/changelog/changes/001-create-auth-tables.yaml
   - include:
       file: db/changelog/changes/002-seed-roles.yaml
+  - include:
+      file: db/changelog/changes/003-add-user-phone-number.yaml
+  - include:
+      file: db/changelog/changes/004-rename-client-role-to-customer.yaml
+  - include:
+      file: db/changelog/changes/005-customer-auth-lifecycle.yaml

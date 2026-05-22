@@ -67,4 +67,14 @@ public class RefreshTokenService {
             }
         });
     }
+
+    @Transactional
+    public void revokeAllForUser(Long userId) {
+        for (RefreshToken refreshToken : refreshTokenRepository.findAllByUserId(userId)) {
+            if (!refreshToken.isRevoked()) {
+                refreshToken.setRevoked(true);
+                refreshTokenRepository.save(refreshToken);
+            }
+        }
+    }
 }

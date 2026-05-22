@@ -1,0 +1,21 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-add-user-phone-number
+      author: codex
+      changes:
+        - addColumn:
+            tableName: users
+            columns:
+              - column:
+                  name: phone_number
+                  type: VARCHAR(32)
+        - addUniqueConstraint:
+            tableName: users
+            columnNames: phone_number
+            constraintName: uk_users_phone_number
+        - createIndex:
+            tableName: users
+            indexName: idx_users_phone_number
+            columns:
+              - column:
+                  name: phone_number

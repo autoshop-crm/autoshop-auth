@@ -1,12 +1,13 @@
 package com.vladko.autoshopauth.auth.controller;
 
 import com.vladko.autoshopauth.auth.dto.AuthResponse;
-import com.vladko.autoshopauth.auth.dto.CurrentUserResponse;
+import com.vladko.autoshopauth.auth.dto.ForgotPasswordRequest;
 import com.vladko.autoshopauth.auth.dto.LoginRequest;
 import com.vladko.autoshopauth.auth.dto.LogoutRequest;
 import com.vladko.autoshopauth.auth.dto.RefreshTokenRequest;
 import com.vladko.autoshopauth.auth.dto.RegisterRequest;
-import com.vladko.autoshopauth.auth.dto.TokenValidationResponse;
+import com.vladko.autoshopauth.auth.dto.ResetPasswordRequest;
+import com.vladko.autoshopauth.auth.dto.VerifyEmailRequest;
 import com.vladko.autoshopauth.auth.service.AuthService;
 import com.vladko.autoshopauth.security.AuthenticatedAccessToken;
 import jakarta.validation.Valid;
@@ -14,16 +15,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/auth/customers")
 @RequiredArgsConstructor
-public class AuthController {
+public class CustomerAuthController {
 
     private final AuthService authService;
 
@@ -48,27 +48,24 @@ public class AuthController {
             @Valid @RequestBody LogoutRequest request
     ) {
         authService.logout(authenticatedAccessToken, request);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/validate")
-    public ResponseEntity<TokenValidationResponse> validate(
-            @AuthenticationPrincipal AuthenticatedAccessToken authenticatedAccessToken
-    ) {
-        return ResponseEntity.ok(authService.validate(authenticatedAccessToken));
+    @PostMapping("/password/forgot")
+    public ResponseEntity<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request);
+        return ResponseEntity.accepted().build();
     }
 
-    @PostMapping("/verify-token")
-    public ResponseEntity<TokenValidationResponse> verifyToken(
-            @AuthenticationPrincipal AuthenticatedAccessToken authenticatedAccessToken
-    ) {
-        return ResponseEntity.ok(authService.validate(authenticatedAccessToken));
+    @PostMapping("/password/reset")
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.noContent().build();
     }
 
-    @GetMapping("/me")
-    public ResponseEntity<CurrentUserResponse> me(
-            @AuthenticationPrincipal AuthenticatedAccessToken authenticatedAccessToken
-    ) {
-        return ResponseEntity.ok(authService.currentUser(authenticatedAccessToken));
+    @PostMapping("/email/verify")
+    public ResponseEntity<Void> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        authService.verifyEmail(request);
+        return ResponseEntity.noContent().build();
     }
 }

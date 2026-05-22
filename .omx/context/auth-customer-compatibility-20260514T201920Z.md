@@ -1,0 +1,25 @@
+# Ralph Context Snapshot
+
+- task statement: Follow `ContextProject/AUTH_SERVICE_CUSTOMER_COMPATIBILITY_PLAN.md` and fully implement customer compatibility in `auth-service`, then verify service operability.
+- desired outcome: `auth-service` externally uses `CUSTOMER` for customer auth flows, exposes compatible customer endpoints, passes tests/build, and remains compatible with `autoshop-core`.
+- known facts/evidence:
+  - Current code still uses `CLIENT` in role model, JWT, tests, and staff guards.
+  - Customer public routes were partially added.
+  - `ContextProject/AUTH_SERVICE_CUSTOMER_COMPATIBILITY_PLAN.md` describes the target architecture and rollout.
+  - Integration tests previously passed for the interim state but still encoded `CLIENT` semantics.
+- constraints:
+  - Keep admin/staff flows protected and working.
+  - Make changes surgically in existing Spring Boot codebase.
+  - Verify with fresh build/test evidence.
+- unknowns/open questions:
+  - Whether any tests or seed logic outside auth integration still hardcode `CLIENT`.
+  - Whether a role rename migration needs compatibility handling for existing data rows.
+  - Whether customer logout should be `200` or `204`; plan prefers dedicated route and consistent behavior.
+- likely codebase touchpoints:
+  - `src/main/java/com/vladko/autoshopauth/role/entity/RoleName.java`
+  - `src/main/resources/db/changelog/changes/002-seed-roles.yaml`
+  - `src/main/java/com/vladko/autoshopauth/auth/service/AuthService.java`
+  - `src/main/java/com/vladko/autoshopauth/security/JwtService.java`
+  - `src/main/java/com/vladko/autoshopauth/auth/controller/CustomerAuthController.java`
+  - `src/main/java/com/vladko/autoshopauth/user/service/AdminUserService.java`
+  - `src/test/java/com/vladko/autoshopauth/auth/AuthControllerIntegrationTest.java`

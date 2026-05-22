@@ -1,11 +1,12 @@
 package com.vladko.autoshopauth.config;
 
 import com.vladko.autoshopauth.common.exception.RoleNotFoundException;
+import com.vladko.autoshopauth.integration.core.service.CoreEmployeeSyncService;
 import com.vladko.autoshopauth.role.entity.Role;
 import com.vladko.autoshopauth.role.entity.RoleName;
 import com.vladko.autoshopauth.role.repository.RoleRepository;
+import com.vladko.autoshopauth.user.entity.AccountStatus;
 import com.vladko.autoshopauth.user.entity.User;
-import com.vladko.autoshopauth.integration.core.service.CoreEmployeeSyncService;
 import com.vladko.autoshopauth.user.repository.UserRepository;
 import java.util.Locale;
 import java.util.Set;
@@ -34,7 +35,7 @@ public class DevUsersInitializer implements ApplicationRunner {
         createUserIfMissing("manager@autoshop.local", "Manager123!", "Dev", "Manager", RoleName.MANAGER);
         createUserIfMissing("reception@autoshop.local", "Reception123!", "Dev", "Reception", RoleName.RECEPTIONIST);
         createUserIfMissing("mechanic@autoshop.local", "Mechanic123!", "Dev", "Mechanic", RoleName.MECHANIC);
-        createUserIfMissing("client@autoshop.local", "Client123!", "Dev", "Client", RoleName.CLIENT);
+        createUserIfMissing("customer@autoshop.local", "Customer123!", "Dev", "Customer", RoleName.CUSTOMER);
     }
 
     private void createUserIfMissing(String email,
@@ -55,12 +56,14 @@ public class DevUsersInitializer implements ApplicationRunner {
                 .passwordHash(passwordEncoder.encode(password))
                 .firstName(firstName)
                 .lastName(lastName)
+                .emailVerified(roleName == RoleName.CUSTOMER)
+                .accountStatus(AccountStatus.ACTIVE)
                 .active(true)
                 .roles(Set.of(role))
                 .build();
 
         User savedUser = userRepository.save(user);
-        if (roleName != RoleName.CLIENT) {
+        if (roleName != RoleName.CUSTOMER) {
             coreEmployeeSyncService.syncStaffUser(savedUser);
         }
     }

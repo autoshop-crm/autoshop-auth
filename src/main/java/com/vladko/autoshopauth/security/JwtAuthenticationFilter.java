@@ -17,6 +17,9 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -25,6 +28,18 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    private static final RequestMatcher PUBLIC_ENDPOINTS = new OrRequestMatcher(
+            new AntPathRequestMatcher("/api/auth/register"),
+            new AntPathRequestMatcher("/api/auth/login"),
+            new AntPathRequestMatcher("/api/auth/refresh"),
+            new AntPathRequestMatcher("/api/auth/customers/register", "POST"),
+            new AntPathRequestMatcher("/api/auth/customers/login", "POST"),
+            new AntPathRequestMatcher("/api/auth/customers/refresh", "POST"),
+            new AntPathRequestMatcher("/api/auth/customers/password/forgot", "POST"),
+            new AntPathRequestMatcher("/api/auth/customers/password/reset", "POST"),
+            new AntPathRequestMatcher("/api/auth/customers/email/verify", "POST")
+    );
 
     private final JwtService jwtService;
     private final AccessTokenBlacklistService blacklistService;
@@ -46,6 +61,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String token = authorizationHeader.substring(7).trim();
         if (!StringUtils.hasText(token)) {
+            if (isPublicEndpoint(request)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
             authenticationEntryPoint.commence(request, response, new TokenAuthenticationException("Bearer token is missing"));
             return;
         }
@@ -87,7 +106,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             handlerExceptionResolver.resolveException(request, response, null, exception);
         } catch (TokenValidationException | TokenBlacklistedException exception) {
             SecurityContextHolder.clearContext();
+            if (isPublicEndpoint(request)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
             authenticationEntryPoint.commence(request, response, new TokenAuthenticationException(exception.getMessage(), exception));
         }
+    }
+
+    private boolean isPublicEndpoint(HttpServletRequest request) {
+        return PUBLIC_ENDPOINTS.matches(request);
     }
 }

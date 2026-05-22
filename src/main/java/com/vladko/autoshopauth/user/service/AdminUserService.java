@@ -3,22 +3,22 @@ package com.vladko.autoshopauth.user.service;
 import com.vladko.autoshopauth.common.exception.InvalidRoleAssignmentException;
 import com.vladko.autoshopauth.common.exception.RoleNotFoundException;
 import com.vladko.autoshopauth.common.exception.UserAlreadyExistsException;
+import com.vladko.autoshopauth.integration.core.service.CoreEmployeeSyncService;
 import com.vladko.autoshopauth.role.entity.Role;
 import com.vladko.autoshopauth.role.entity.RoleName;
 import com.vladko.autoshopauth.role.repository.RoleRepository;
 import com.vladko.autoshopauth.user.dto.AdminUserCreateRequest;
 import com.vladko.autoshopauth.user.dto.UserResponse;
-import com.vladko.autoshopauth.integration.core.service.CoreEmployeeSyncService;
+import com.vladko.autoshopauth.user.entity.AccountStatus;
 import com.vladko.autoshopauth.user.entity.User;
 import com.vladko.autoshopauth.user.repository.UserRepository;
+import java.util.Locale;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Locale;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -29,14 +29,19 @@ public class AdminUserService {
     private final PasswordEncoder passwordEncoder;
     private final CoreEmployeeSyncService coreEmployeeSyncService;
 
+    @Transactional(readOnly = true)
+    public java.util.List<UserResponse> getAllUsers() {
+        return userRepository.findAll().stream().map(this::toResponse).toList();
+    }
+
     @Transactional
     public UserResponse createUser(AdminUserCreateRequest request) {
-        validateStaffRoles(request.roles());
-
         String normalizedEmail = request.email().trim().toLowerCase(Locale.ROOT);
         if (userRepository.existsByEmail(normalizedEmail)) {
             throw new UserAlreadyExistsException("User with this email already exists");
         }
+
+        validateStaffRoles(request.roles());
 
         Set<Role> roles = request.roles()
                 .stream()
@@ -48,6 +53,8 @@ public class AdminUserService {
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .firstName(normalizeOptionalText(request.firstName()))
                 .lastName(normalizeOptionalText(request.lastName()))
+                .emailVerified(true)
+                .accountStatus(AccountStatus.ACTIVE)
                 .active(true)
                 .roles(roles)
                 .build();
@@ -61,8 +68,8 @@ public class AdminUserService {
         if (roles == null || roles.isEmpty()) {
             throw new InvalidRoleAssignmentException("At least one staff role is required");
         }
-        if (roles.contains(RoleName.CLIENT)) {
-            throw new InvalidRoleAssignmentException("CLIENT users must be created through public registration");
+        if (roles.contains(RoleName.CUSTOMER)) {
+            throw new InvalidRoleAssignmentException("CUSTOMER users must be created through public registration");
         }
     }
 

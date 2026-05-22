@@ -10,6 +10,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -37,6 +38,17 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.UNAUTHORIZED, exception.getMessage(), request.getRequestURI());
     }
 
+    @ExceptionHandler({
+            InvalidRoleAssignmentException.class,
+            InvalidCustomerActionTokenException.class
+    })
+    public ResponseEntity<ErrorResponse> handleBadRequest(
+            RuntimeException exception,
+            HttpServletRequest request
+    ) {
+        return buildResponse(HttpStatus.BAD_REQUEST, exception.getMessage(), request.getRequestURI());
+    }
+
     @ExceptionHandler(RoleNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleRoleNotFound(
             RoleNotFoundException exception,
@@ -45,20 +57,21 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, exception.getMessage(), request.getRequestURI());
     }
 
-    @ExceptionHandler(InvalidRoleAssignmentException.class)
-    public ResponseEntity<ErrorResponse> handleInvalidRoleAssignment(
-            InvalidRoleAssignmentException exception,
-            HttpServletRequest request
-    ) {
-        return buildResponse(HttpStatus.BAD_REQUEST, exception.getMessage(), request.getRequestURI());
-    }
-
     @ExceptionHandler(RedisUnavailableException.class)
     public ResponseEntity<ErrorResponse> handleRedisUnavailable(
             RedisUnavailableException exception,
             HttpServletRequest request
     ) {
         return buildResponse(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage(), request.getRequestURI());
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatus(
+            ResponseStatusException exception,
+            HttpServletRequest request
+    ) {
+        String message = exception.getReason() == null ? exception.getStatusCode().toString() : exception.getReason();
+        return buildResponse(HttpStatus.valueOf(exception.getStatusCode().value()), message, request.getRequestURI());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

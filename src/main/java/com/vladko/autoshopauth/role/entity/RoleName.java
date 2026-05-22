@@ -5,5 +5,5 @@ public enum RoleName {
     MANAGER,
     MECHANIC,
     RECEPTIONIST,
-    CLIENT
+    CUSTOMER
 }
