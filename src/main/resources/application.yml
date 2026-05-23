@@ -31,10 +31,10 @@ app:
       access-ttl: 15m
       refresh-ttl: 7d
   bootstrap:
-    enabled: false
-    email: ${BOOTSTRAP_EMAIL:manager@autoshop.local}
+    enabled: true
+    email: ${BOOTSTRAP_EMAIL:admin@autoshop.local}
     password: ${BOOTSTRAP_PASSWORD:ChangeMe123!}
-    role: ${BOOTSTRAP_ROLE:MANAGER}
+    role: ${BOOTSTRAP_ROLE:ADMIN}
   core:
     base-url: ${CORE_BASE_URL:http://core:8080}
     sync-token: ${APP_EMPLOYEE_SYNC_TOKEN:change-me-employee-sync-token}
