@@ -17,7 +17,14 @@ import com.vladko.autoshopauth.token.repository.CustomerActionTokenRepository;
 import com.vladko.autoshopauth.token.repository.RefreshTokenRepository;
 import com.vladko.autoshopauth.user.entity.User;
 import com.vladko.autoshopauth.user.repository.UserRepository;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.Date;
+import java.util.List;
 import java.util.UUID;
+import javax.crypto.SecretKey;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -50,6 +57,9 @@ class AuthControllerIntegrationTest {
 
     @Autowired
     private JwtService jwtService;
+
+    @Value("${app.security.jwt.secret}")
+    private String jwtSecret;
 
     @Value("${app.bootstrap.email}")
     private String bootstrapEmail;
@@ -424,6 +434,28 @@ class AuthControllerIntegrationTest {
                 .andExpect(jsonPath("$.roles", hasItem("MANAGER")));
     }
 
+    @Test
+    void adminCanCreateStaffUserWhenJwtContainsPrefixedRole() throws Exception {
+        User adminUser = userRepository.findByEmail("admin@autoshop.local").orElseThrow();
+        String managerEmail = uniqueEmail();
+
+        mockMvc.perform(post("/api/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(accessToken(adminUser, List.of("ROLE_ADMIN"))))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "%s",
+                                  "password": "ManagerPass123!",
+                                  "firstName": "New",
+                                  "lastName": "Manager",
+                                  "roles": ["MANAGER"]
+                                }
+                                """.formatted(managerEmail)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.email").value(managerEmail))
+                .andExpect(jsonPath("$.roles", hasItem("MANAGER")));
+    }
+
     private void registerUser(String email, String password) throws Exception {
         mockMvc.perform(post("/api/auth/customers/register")
                         .contentType(APPLICATION_JSON)
@@ -447,6 +479,22 @@ class AuthControllerIntegrationTest {
 
     private String bearer(String token) {
         return "Bearer " + token;
+    }
+
+    private String accessToken(User user, List<String> roles) {
+        SecretKey secretKey = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
+        Instant now = Instant.now();
+
+        return Jwts.builder()
+                .id(UUID.randomUUID().toString())
+                .subject(String.valueOf(user.getId()))
+                .claim("email", user.getEmail())
+                .claim("roles", roles)
+                .claim("type", "access")
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plusSeconds(900)))
+                .signWith(secretKey)
+                .compact();
     }
 
     private String uniqueEmail() {

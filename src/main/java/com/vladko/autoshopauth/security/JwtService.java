@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import javax.crypto.SecretKey;
@@ -67,6 +68,7 @@ public class JwtService {
 
             Set<String> roles = rawRoles.stream()
                     .map(String::valueOf)
+                    .map(this::normalizeRole)
                     .collect(java.util.stream.Collectors.toSet());
 
             return new AccessTokenClaims(
@@ -81,5 +83,19 @@ public class JwtService {
         } catch (JwtException | IllegalArgumentException exception) {
             throw new TokenValidationException("Access token is invalid", exception);
         }
+    }
+
+    private String normalizeRole(String role) {
+        String normalizedRole = role == null ? "" : role.trim();
+        if (normalizedRole.startsWith("ROLE_")) {
+            normalizedRole = normalizedRole.substring(5);
+        }
+
+        normalizedRole = normalizedRole.trim().toUpperCase(Locale.ROOT);
+        if (normalizedRole.isEmpty()) {
+            throw new TokenValidationException("Access token is invalid");
+        }
+
+        return normalizedRole;
     }
 }
